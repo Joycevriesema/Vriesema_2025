@@ -9,7 +9,7 @@ setwd("/Users/joycevriesema/Downloads/Studie/MSc project 2025")
 library(tidyverse)
 library(psych)
 library(vegan)
-
+ 
 
 #### MULTIVARIATE ANALYSIS DOMINANT SPECIES ####
 # Question to answer: how does species composition differ between SNP and SPGCA?
