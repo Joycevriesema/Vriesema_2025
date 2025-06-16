@@ -74,7 +74,7 @@ transects_paired <- fish_data %>%
   
 
 
-# create bar plot for the average bird count per transect pair 
+# create bar plot for the average fish count per transect pair 
 ggplot(transects_paired, aes(x = transect_pair, y = count, fill = observation)) +
   geom_bar(stat = "identity") + 
   theme_minimal() + 
@@ -89,6 +89,286 @@ ggplot(transects_paired, aes(x = transect_pair, y = count, fill = observation)) 
 # most fish observations at transects tree_1,tree_2,tree_3 and tree_4
 
 
+#### data validation ####
+# run PCA to see patterns, make first from long format to wide format
+library(FactoMineR)
+library(factoextra)
+
+fish_data_wide <- fish_data %>%
+  group_by(date, transect_ID, observation) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)
+
+# Selecteer alleen de numerieke kolommen
+pca_input <- fish_data_wide %>% select(V, B, O, H, S1, S2, S3)
+
+# PCA uitvoeren en schalen
+pca_result <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+
+# Bekijk samenvatting
+summary(pca_result)
+
+biplot(pca_result, scale = 0)
+text(pca_result$x[,1], pca_result$x[,2], labels = fish_data_wide$transect_ID, pos = 4, cex = 0.7)
+
+
+pca_1 <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+biplot(pca_1, cex = 0.6, xlabs = rep("", nrow(pca_input)))
+# h lijkt af te wijken
+
+
+# versie zonder O's
+pca_input_noO <- pca_input %>% select(-O)
+pca_noO <- prcomp(pca_input_noO, center = TRUE, scale. = TRUE)
+biplot(pca_noO, cex = 0.6, xlabs = rep("", nrow(pca_input_noO)))
+# patterns looks the same as the original, looks correlated with B and V
+
+# versie zonder B's
+pca_input_noB <- pca_input %>% select(-B)
+pca_noB <- prcomp(pca_input_noB, center = TRUE, scale. = TRUE)
+biplot(pca_noB, cex = 0.6, xlabs = rep("", nrow(pca_input_noB)))
+# hoek tussen de s catgeorien en o en v lijken nu kleiner en dus wat meer met elkaar gecoreleerd, ook lijkt de hoek tussen o,v en h kleiner
+# B versterkt de verschillen tussen individuen en scholen
+
+# versie zonder V's
+pca_input_noV <- pca_input %>% select(-V)
+pca_noV <- prcomp(pca_input_noV, center = TRUE, scale. = TRUE)
+biplot(pca_noV, cex = 0.6, xlabs = rep("", nrow(pca_input_noV)))
+# verwijdering van V lijkt nu dat O en B sterker geclusterd zijn, pijl van H lijkt korter
+# S groepen sterk geclusterd
+# invloed op onderscheiding individuele vissen en ind e spreiding van H
+
+# versie zonder H's
+pca_input_noH <- pca_input %>% select(-H)
+pca_noH <- prcomp(pca_input_noH, center = TRUE, scale. = TRUE)
+biplot(pca_noH, cex = 0.6, xlabs = rep("", nrow(pca_input_noH)))
+# verwijdering van H --> O,B,V sterk gecoreleerd, exact dezelfde grafiek als waneer alle categorieen erin zitten dus het verwijderen van H lijkt geen invloed te hebben? Dus niet sterk gecoreleerd met O,B,V
+# draagt weinig bij aan de correlaties met andere categorieën
+
+# versie zonder S1's
+pca_input_noS1 <- pca_input %>% select(-S1)
+pca_noS1 <- prcomp(pca_input_noS1, center = TRUE, scale. = TRUE)
+biplot(pca_noS1, cex = 0.6, xlabs = rep("", nrow(pca_input_noS1)))
+# O en B lijken sterker te correleren, lijkt geen impact te hebben op S2 en S3
+# overlapt S1 met O en B?
+
+# versie zonder S2's
+pca_input_noS2 <- pca_input %>% select(-S2)
+pca_noS2 <- prcomp(pca_input_noS2, center = TRUE, scale. = TRUE)
+biplot(pca_noS2, cex = 0.6, xlabs = rep("", nrow(pca_input_noS2)))
+# nu lijken o,b,v meer richting s1 en s3 te trekken, H staat nog steeds tegengesteld
+# S2 lijkt invloed te hebben op de clustering
+
+# versie zonder S3's
+pca_input_noS3 <- pca_input %>% select(-S3)
+pca_noS3 <- prcomp(pca_input_noS3, center = TRUE, scale. = TRUE)
+biplot(pca_noS3, cex = 0.6, xlabs = rep("", nrow(pca_input_noS3)))
+# o,b,v sterk gecoreleerd, pijlen bijna overlappend, H nog steeds tegengesteld
+# S1 en S2 sterk gecoreleerd, pijlen bijna overlappend
+# S3 zorgt voor variatie binnen de school categorieën, zonder S3 lijken S1 en S2 meer op elkaar
+
+# algemene conclusies:
+# 1. O,V,B vormen een sterk cluster, sterk gecoreleerd en mogelijk vergelijkbare observatietypes
+
+#S2 en S3 dragen unieke informatie bij over schoolvissen. Ze beïnvloeden hoe ‘individuele’ observaties zich verhouden tot schoolobservaties.
+#S1 lijkt minder onderscheidend, mogelijk omdat het overlap heeft met andere categorieën.
+#H is consistent orthogonaal → het representeert een dimensie die nauwelijks overlapt met de andere observaties (misschien iets ecologisch unieks).
+#O, B, V bewegen als cluster → sterk onderling gecorreleerd, mogelijk vergelijkbare observatietypes.
+
+# B en V helpen om individuele vissen van elkaar te onderscheiden en van scholen.
+# H is een aparte component, maar draagt niet veel bij aan de clustering tussen individuen en scholen.
+# Scholen (S1,S2,S3) blijven redelijk bij elkaar, en B versterkt de scheiding tussen scholen en individuen.
+
+# lijkt erop dat het niet veel uitmaakt of je een B,V,H of O noteert voor de observatie van een individuele vis
+
+
+
+
+
+#### GROEPEREN SCHOLEN VS GESCHEIDEN ####
+# Maak een nieuwe kolom waarbij S1, S2, S3 samengevoegd worden tot "School"
+fish_data_grouped <- fish_data %>%
+  mutate(observation_grouped = case_when(
+    observation %in% c("S1", "S2", "S3") ~ "School",
+    observation %in% c("V", "B", "O", "H") ~ observation,  # behoud individuele categorieën
+    TRUE ~ NA_character_
+  ))
+
+# Vervolgens maak je een breed formaat (wide data) van deze grouped data, waarin je counts per category per sample/timeslot e.d. hebt
+fish_data_wide_grouped <- fish_data_grouped %>%
+  group_by(transect_ID, date, observation_grouped) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = observation_grouped, values_from = count, values_fill = 0)
+
+# Selecteer kolommen die je in PCA wilt meenemen, bijvoorbeeld
+pca_input_grouped <- fish_data_wide_grouped %>% select(-transect_ID, -date)
+
+# PCA uitvoeren
+pca_grouped <- prcomp(pca_input_grouped, center = TRUE, scale. = TRUE)
+
+# Biplot
+biplot(pca_grouped, cex=0.6, xlabs = rep("", nrow(pca_input_grouped)))
+# B,V,O and school lijken geclusterd, H wijkt sterk af
+
+
+#### DISTANCE INTERVAL ####
+# per afstandinterval kijken wat de patronen tussen de verschillende groepen zijn
+
+
+library(dplyr)
+library(ggplot2)
+
+summary_counts <- fish_data %>%
+  group_by(distance_interval, observation) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(summary_counts, aes(x = distance_interval, y = count, fill = observation)) +
+  geom_col(position = "stack") +
+  theme_minimal() +
+  labs(title = "Aantal observaties per afstandscategorie en observatie",
+       x = "Afstandscategorie",
+       y = "Aantal observaties",
+       fill = "Observatie") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# alle B,V,O en H samen en alle S-groepen samen
+# Maak de groepen aan
+fish_data <- fish_data %>%
+  mutate(group = case_when(
+    observation %in% c("V", "B", "O", "H") ~ "individueel",
+    observation %in% c("S1", "S2", "S3") ~ "school",
+    TRUE ~ NA_character_
+  ))
+
+# Tel het aantal observaties per afstandscategorie en groep
+summary_distance <- fish_data %>%
+  filter(!is.na(group)) %>%
+  group_by(distance_interval, group) %>%
+  summarise(total_count = n(), .groups = "drop")
+
+# Maak de stacked barplot
+ggplot(summary_distance, aes(x = distance_interval, y = total_count, fill = group)) +
+  geom_col(position = "stack") +
+  theme_minimal() +
+  labs(title = "Total fish per distance interval",
+       x = "Distance interval (m)",
+       y = "Total count",
+       fill = "Class") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# lijkt dat scholen pas verder van de kust voorkomen
+# weinig vis eerste 100 meter van de kust
+
+
+
+
+# PCA DISTANCE INTERVAL
+
+# 1. Tel aantal observaties per afstandscategorie en observatie
+pca_data <- fish_data %>%
+  group_by(distance_interval, observation) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)
+
+# 2. Selecteer alleen numerieke kolommen (zonder afstandscategorie)
+pca_input <- pca_data %>% select(-distance_interval)
+
+# 3. Voer PCA uit (centeren en schalen)
+pca_result <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+
+# 4. Maak dataframe van PCA scores en voeg afstandscategorie toe
+scores <- as.data.frame(pca_result$x)
+scores$distance_interval <- pca_data$distance_interval
+
+loadings <- as.data.frame(pca_result$rotation)
+loadings$observation <- rownames(loadings)
+
+ggplot() +
+  geom_point(data = scores, aes(x = PC1, y = PC2, label = distance_interval), color = "black") +
+  geom_text(data = scores, aes(x = PC1, y = PC2, label = distance_interval), nudge_y = 0.1) +
+  geom_segment(data = loadings,
+               aes(x = 0, y = 0, xend = PC1 * 2, yend = PC2 * 2), 
+               arrow = arrow(length = unit(0.2, "cm")), color = "red") +
+  geom_text(data = loadings,
+            aes(x = PC1 * 3.2, y = PC2 * 3.2, label = observation),
+            color = "red") +
+  theme_minimal() +
+  labs(title = "PCA met afstandscategorieën (punten) en observatietypen (pijlen)",
+       x = "PC1", y = "PC2")
+
+
+
+# Eerst de packages laden (als ze nog niet geïnstalleerd zijn, eerst installeren met install.packages())
+library(factoextra)
+
+# Stel je hebt al je PCA uitgevoerd, bijvoorbeeld:
+pca_result <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+
+# Maak een mooie biplot
+fviz_pca_biplot(pca_result,
+                repel = TRUE,           # voorkomt overlappende labels
+                col.var = "red",        # kleur van de variabele pijlen
+                col.ind = "blue",       # kleur van de punten (individuen)
+                geom.ind = "point",     # alleen punten voor samples (geen labels)
+                legend.title = list(fill = "Variables", color = "Samples"),
+                title = "PCA Biplot")
+
+fviz_pca_biplot(pca_result,
+                geom.ind = "text",
+                repel = TRUE,
+                col.var = "red",
+                col.ind = "blue",
+                label = "all") # label zowel punten als pijlen
+
+
+fviz_pca_biplot(pca_result,
+                geom.ind = "text",
+                repel = TRUE,
+                col.var = "red",
+                col.ind = "blue",
+                label = c("ind", "var"))  # labels voor individuen en variabelen
+
+
+
+# Stap 1 & 2: van lang naar breed met counts per afstand en observatie
+pca_input <- fish_data %>%
+  group_by(distance_interval, observation) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)
+
+# Zet distance_interval als rijnaam en verwijder kolom uit data frame (prcomp wil alleen numerieke data)
+# Zet pca_input om naar gewone data.frame
+pca_input <- as.data.frame(pca_input)
+
+# Zet rijnamen als afstandscategorieën
+rownames(pca_input) <- as.character(fish_data$distance_interval)
+
+
+# Nu pca_input klaar voor PCA:
+pca_result <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+
+# Biplot met afstandsintervallen als labels
+library(factoextra)
+fviz_pca_biplot(pca_result,
+                geom.ind = "text",
+                repel = TRUE,
+                col.var = "red",
+                col.ind = "blue")
+
+
+rownames(pca_input) <- unique(fish_data$distance_interval)
+
+
+
+
+
+
+
+
+
+
+
+
+### oud
 # per transect pair over time
 
 # filter for Mbalangeti mouth
