@@ -243,6 +243,12 @@ biplot(pca_noS3, cex = 0.6, xlabs = rep("", nrow(pca_input_noS3)))
 
 
 
+# verschillen tussen afstand en diepte voor de verschillende vis categorieën
+# DCA
+# explore the correlations among the environmental factors in a panel pairs plot
+psych::pairs.panels(fish_data,smooth=F,ci=T,ellipses=F,stars=T,method="pearson")
+psych::pairs.panels(envdat,smooth=F,ci=T,ellipses=F,stars=T,method="spearman")
+# note that the units are very different! 
 
 
 
@@ -254,7 +260,18 @@ biplot(pca_noS3, cex = 0.6, xlabs = rep("", nrow(pca_input_noS3)))
 
 
 
-# verschil scholen of individuele vissen over afstand 
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # diepte en afstand
