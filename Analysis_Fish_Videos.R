@@ -101,41 +101,63 @@ ggplot(distance_data, aes(x = distance_interval, y = count, fill = observation))
        y = "Count",
        fill = "Observation class") +
   theme_minimal()
+# ziet dus goed dat vooral classe O (onderbroken/onvolledig boogje) toeneemt over het transect, de andere groepen lijken constant te blijven
+
+# plot fish count per transect pair by distance categories
+transects_paired2 <- fish_data %>%
+  mutate(transect_pair = case_when(
+    transect_ID %in% c("pap_1", "pap_2") ~ "Papyrus Mbalangeti Mouth",
+    transect_ID %in% c("pap_3", "pap_4") ~ "Papyrus Robana Mouth",
+    transect_ID %in% c("pap_5", "pap_6") ~ "Papyrus Robana Far",
+    transect_ID %in% c("tree_1", "tree_2") ~ "Tree Mbalangeti Mid",
+    transect_ID %in% c("tree_3", "tree_4") ~ "Tree Robana Mid",
+    transect_ID %in% c("tree_5", "tree_6") ~ "Tree Robana Mouth",
+    transect_ID %in% c("tree_7", "tree_8") ~ "Tree Robana Far",
+    TRUE ~ NA_character_
+  )) %>%
+  group_by(transect_pair, distance_interval, observation) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Plot maken
+ggplot(transects_paired2, aes(x = distance_interval, y = count, fill = observation)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  facet_wrap(~ transect_pair, scales = "free_x") +
+  theme_minimal() +
+  labs(title = "Fish counts per distance class and transect pair",
+       x = "Distance class",
+       y = "Fish count",
+       fill = "Observation class") +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("fish_plot.png", width = 14, height = 8, dpi = 300)
+# voor bijna elk transect pair lijkt het duidelijk dat groep O toeneemt
 
 
-# Bereken gemiddelde aantal per afstandscategorie en observatie
-# Als je counts per transect hebt, zou je dat hier kunnen doen
-mean_data <- fish_data %>%
-  group_by(distance_interval, observation) %>%
-  summarise(mean_count = n()/n_distinct(transect_ID), .groups = "drop")
+## Schools vs individuals 
 
-# Lijnplot: trend per viscategorie over afstand
-ggplot(mean_data, aes(x = distance_interval, y = mean_count, color = observation, group = observation)) +
-  geom_line(size = 1) +
-  geom_point() +
-  labs(title = "Trend van visobservaties per afstandscategorie",
-       x = "Afstandscategorie (m)",
-       y = "Gemiddeld aantal observaties per transect",
-       color = "Viscategorie") +
-  theme_minimal()
-# ziet dus goed dat vooral classe O (onderbroken/onvolledig boogje) toeneemt over het transect
+# group al schools into one group and so the same for the individual classes
+fish_data_grouped <- fish_data %>%
+  mutate(observation_grouped = case_when(
+    observation %in% c("S1", "S2", "S3") ~ "School",
+    observation %in% c("V", "B", "O", "H") ~ "Individual",
+    TRUE ~ NA_character_
+  )) %>%
+  group_by(distance_interval, observation_grouped) %>%
+  summarise(count = n(), .groups = "drop")
 
-
-
-
-
-
-
+# plot schools vs individuals
+ggplot(fish_data_grouped, aes(x = distance_interval, y = count, fill = observation_grouped)) +
+  geom_col(position = "stack") +
+  theme_minimal() +
+  labs(title = "Fish counts: schools vs individuals",
+       x = "Distance interval",
+       y = "Count",
+       fill = "Fish class") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-
-
-
-
-
-
-
-#### data validation ####
+## data validation to whether it matters to use different categories for individual and schools of fish
 # run PCA to see patterns, make first from long format to wide format
 library(FactoMineR)
 library(factoextra)
@@ -145,72 +167,64 @@ fish_data_wide <- fish_data %>%
   summarise(count = n(), .groups = "drop") %>%
   pivot_wider(names_from = observation, values_from = count, values_fill = 0)
 
-# Selecteer alleen de numerieke kolommen
+# select only numerical columns and run PCA
 pca_input <- fish_data_wide %>% select(V, B, O, H, S1, S2, S3)
-
-# PCA uitvoeren en schalen
 pca_result <- prcomp(pca_input, center = TRUE, scale. = TRUE)
-
-# Bekijk samenvatting
 summary(pca_result)
 
-biplot(pca_result, scale = 0)
-text(pca_result$x[,1], pca_result$x[,2], labels = fish_data_wide$transect_ID, pos = 4, cex = 0.7)
-
-
+# make the biplot
 pca_1 <- prcomp(pca_input, center = TRUE, scale. = TRUE)
 biplot(pca_1, cex = 0.6, xlabs = rep("", nrow(pca_input)))
-# h lijkt af te wijken
+# group H has opposite direction, B and V seem clustered and S1,S2 and S3 seems also clustered
 
-
-# versie zonder O's
+# removing O's
 pca_input_noO <- pca_input %>% select(-O)
 pca_noO <- prcomp(pca_input_noO, center = TRUE, scale. = TRUE)
 biplot(pca_noO, cex = 0.6, xlabs = rep("", nrow(pca_input_noO)))
 # patterns looks the same as the original, looks correlated with B and V
 
-# versie zonder B's
+# removing B's
 pca_input_noB <- pca_input %>% select(-B)
 pca_noB <- prcomp(pca_input_noB, center = TRUE, scale. = TRUE)
 biplot(pca_noB, cex = 0.6, xlabs = rep("", nrow(pca_input_noB)))
-# hoek tussen de s catgeorien en o en v lijken nu kleiner en dus wat meer met elkaar gecoreleerd, ook lijkt de hoek tussen o,v en h kleiner
-# B versterkt de verschillen tussen individuen en scholen
+# angle between the S categories and O and V seem smaller and more clustered together. Also the angle between O,V and H seems smaller.
 
-# versie zonder V's
+# removing V's
 pca_input_noV <- pca_input %>% select(-V)
 pca_noV <- prcomp(pca_input_noV, center = TRUE, scale. = TRUE)
 biplot(pca_noV, cex = 0.6, xlabs = rep("", nrow(pca_input_noV)))
-# verwijdering van V lijkt nu dat O en B sterker geclusterd zijn, pijl van H lijkt korter
-# S groepen sterk geclusterd
-# invloed op onderscheiding individuele vissen en ind e spreiding van H
+# O and B seem clustered stronger. Arrow of H seems shorter.
+# S groups seem clustered strongly
 
-# versie zonder H's
+# removing H's
 pca_input_noH <- pca_input %>% select(-H)
 pca_noH <- prcomp(pca_input_noH, center = TRUE, scale. = TRUE)
 biplot(pca_noH, cex = 0.6, xlabs = rep("", nrow(pca_input_noH)))
-# verwijdering van H --> O,B,V sterk gecoreleerd, exact dezelfde grafiek als waneer alle categorieen erin zitten dus het verwijderen van H lijkt geen invloed te hebben? Dus niet sterk gecoreleerd met O,B,V
-# draagt weinig bij aan de correlaties met andere categorieën
+# removing of H seems to have low effect, the graph looks the same as when H is included.
+# does this indicate that removing or including of H does not matter for the patterns? and H is not correlated to any of the other categories?
 
-# versie zonder S1's
+# removing S1's
 pca_input_noS1 <- pca_input %>% select(-S1)
 pca_noS1 <- prcomp(pca_input_noS1, center = TRUE, scale. = TRUE)
 biplot(pca_noS1, cex = 0.6, xlabs = rep("", nrow(pca_input_noS1)))
-# O en B lijken sterker te correleren, lijkt geen impact te hebben op S2 en S3
-# overlapt S1 met O en B?
+# O en B are clustered/correlated very strong
+# does not seem to affect S2 and S3
+# does S1 overlap with O and B because the effect on O and B seems so strong
 
-# versie zonder S2's
+# removing S2's
 pca_input_noS2 <- pca_input %>% select(-S2)
 pca_noS2 <- prcomp(pca_input_noS2, center = TRUE, scale. = TRUE)
 biplot(pca_noS2, cex = 0.6, xlabs = rep("", nrow(pca_input_noS2)))
-# nu lijken o,b,v meer richting s1 en s3 te trekken, H staat nog steeds tegengesteld
-# S2 lijkt invloed te hebben op de clustering
+# O,B,V are clustered more together with S1 and S3
+# H is still opposite 
 
-# versie zonder S3's
+# removing S3's
 pca_input_noS3 <- pca_input %>% select(-S3)
 pca_noS3 <- prcomp(pca_input_noS3, center = TRUE, scale. = TRUE)
 biplot(pca_noS3, cex = 0.6, xlabs = rep("", nrow(pca_input_noS3)))
-# o,b,v sterk gecoreleerd, pijlen bijna overlappend, H nog steeds tegengesteld
-# S1 en S2 sterk gecoreleerd, pijlen bijna overlappend
+# O,B,V strongly clustered, arrows are almost overlapping
+# H still opposite
+# S1 and S2 strongly clustered, arrows almost overlapping
 # S3 zorgt voor variatie binnen de school categorieën, zonder S3 lijken S1 en S2 meer op elkaar
 
 # algemene conclusies:
@@ -231,16 +245,35 @@ biplot(pca_noS3, cex = 0.6, xlabs = rep("", nrow(pca_input_noS3)))
 
 
 
-#### GROEPEREN SCHOLEN VS GESCHEIDEN ####
-# Maak een nieuwe kolom waarbij S1, S2, S3 samengevoegd worden tot "School"
-fish_data_grouped <- fish_data %>%
-  mutate(observation_grouped = case_when(
-    observation %in% c("S1", "S2", "S3") ~ "School",
-    observation %in% c("V", "B", "O", "H") ~ observation,  # behoud individuele categorieën
-    TRUE ~ NA_character_
-  ))
 
-# Vervolgens maak je een breed formaat (wide data) van deze grouped data, waarin je counts per category per sample/timeslot e.d. hebt
+
+
+
+
+
+
+
+
+# verschil scholen of individuele vissen over afstand 
+
+
+# diepte en afstand
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Vervolgens maak je een breed format (wide data) van deze grouped data, waarin je counts per category per sample/timeslot e.d. hebt
 fish_data_wide_grouped <- fish_data_grouped %>%
   group_by(transect_ID, date, observation_grouped) %>%
   summarise(count = n(), .groups = "drop") %>%
@@ -255,6 +288,9 @@ pca_grouped <- prcomp(pca_input_grouped, center = TRUE, scale. = TRUE)
 # Biplot
 biplot(pca_grouped, cex=0.6, xlabs = rep("", nrow(pca_input_grouped)))
 # B,V,O and school lijken geclusterd, H wijkt sterk af
+
+
+
 
 
 #### DISTANCE INTERVAL ####
@@ -314,43 +350,36 @@ library(dplyr)
 library(tidyr)
 
 # 1. Maak een matrix: rijen = afstandscategorieën, kolommen = observatiecategorieën
-dca_input <- fish_data %>%
-  group_by(distance_interval, observation) %>%
+fish_data_wide <- fish_data %>%
+  group_by(observation, distance_interval) %>%
   summarise(count = n(), .groups = "drop") %>%
-  pivot_wider(names_from = observation, values_from = count, values_fill = 0)
+  pivot_wider(names_from = distance_interval, values_from = count, values_fill = 0)
 
-# Zet distance_interval als rownames
-dca_matrix <- as.data.frame(dca_input)
-rownames(dca_matrix) <- dca_matrix$distance_interval
-dca_matrix$distance_interval <- NULL  # verwijder duplicaat kolom
+# 2. Zet observation als rownames en voer DCA uit
+row.names(fish_data_wide) <- fish_data_wide$observation
+fish_data_matrix <- fish_data_wide[, -1]  # verwijder 'observation' kolom
+dca_result <- decorana(fish_data_matrix)
 
-# 2. Voer de DCA uit
-dca_result <- decorana(dca_matrix)
-
-# 3. Plot de resultaten
-plot(dca_result, type = "t", main = "DCA van visobservaties over afstand")
-
-# 3. Pak scores uit: sites (afstandscategorieën) en species (observaties)
+# 3. Pak scores
 site_scores <- as.data.frame(scores(dca_result, display = "sites"))
-site_scores$distance_interval <- rownames(site_scores)
+site_scores$observation <- rownames(site_scores)
 
 species_scores <- as.data.frame(scores(dca_result, display = "species"))
-species_scores$observation <- rownames(species_scores)
+species_scores$distance_interval <- rownames(species_scores)
 
-# 4. Plotten met ggplot2
+# 4. Plot met ggplot
 ggplot() +
   geom_point(data = site_scores, aes(x = DCA1, y = DCA2), color = "blue", size = 3) +
-  geom_text(data = site_scores, aes(x = DCA1, y = DCA2, label = distance_interval),
-            vjust = -1, color = "blue") +
+  geom_text(data = site_scores, aes(x = DCA1, y = DCA2, label = observation), vjust = -1, color = "blue") +
   geom_segment(data = species_scores,
                aes(x = 0, y = 0, xend = DCA1, yend = DCA2),
                arrow = arrow(length = unit(0.3, "cm")),
                color = "red") +
   geom_text(data = species_scores,
-            aes(x = DCA1, y = DCA2, label = observation),
+            aes(x = DCA1, y = DCA2, label = distance_interval),
             color = "red", vjust = 1.5) +
   theme_minimal() +
-  labs(title = "DCA biplot: Afstandscategorieën en visobservaties",
+  labs(title = "DCA biplot: visobservaties en afstandscategorieën",
        x = "DCA1",
        y = "DCA2")
 # 0-100m wijkt af 
