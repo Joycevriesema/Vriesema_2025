@@ -6,6 +6,7 @@ library(tidyverse)
 library(stringr)
 library(ggplot2)
 library(tidyr)
+library(vegan)
 
 fish_data <-read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRCwiQGeumB9AuvRjnobaDJLq76NWyPQrvnPdvP58Qxv5SGMt4LMKjxMQMREGnYdoIkO1oCfTOcqp1Z/pub?gid=946923967&single=true&output=csv") %>%
   mutate(observation = str_trim(observation),
@@ -46,17 +47,17 @@ daily_obs$date <- factor(daily_obs$date, levels = c(
   "17 Apr 2025"
 ))
 
-# plot per day
+# plot viewing the total number of fish per class for the whole study period
 ggplot(daily_obs, aes(x = date, y = Count, fill = observation)) +
   geom_col(position = "dodge") +
   theme_minimal() +
   labs(title = "Fish abundance by class",
        x = "Date",
-       y = "Number of observations",
-       fill = "observation Class") +
+       y = "Count",
+       fill = "Observation class") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# per transect pair
+# looking into fish abundance per transect pair
 # create column with names for transect pairs
 transects_paired <- fish_data %>%
   mutate(transect_pair = case_when(
@@ -72,21 +73,66 @@ transects_paired <- fish_data %>%
   group_by(transect_pair, observation, date) %>%
   summarise(count = n(), .groups = "drop")
   
-
-
-# create bar plot for the average fish count per transect pair 
+# plot for the average fish count per transect pair 
 ggplot(transects_paired, aes(x = transect_pair, y = count, fill = observation)) +
   geom_bar(stat = "identity") + 
   theme_minimal() + 
-  labs(x = "",
-       y = "total number of fish observations",
-       fill = "") +
+  labs(title= "Fish abundance per transect pair",
+       x = "",
+       y = "Count",
+       fill = "Observation class") +
   theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
         strip.text = element_text(size = 12),
         axis.title.x = element_text(size = 12),  
         axis.title.y = element_text(size = 12),
         legend.position = "right")
-# most fish observations at transects tree_1,tree_2,tree_3 and tree_4
+# most fish observations at mid distance from both rivers
+
+# fish counts per distance interval
+distance_data <- fish_data %>%
+  group_by(distance_interval, observation) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Barplot: hoeveelheden per viscategorie per afstandscategorie
+ggplot(distance_data, aes(x = distance_interval, y = count, fill = observation)) +
+  geom_col(position = "stack") +
+  labs(title= "Fish count per distance interval and by observation classes",
+       x = "",
+       y = "Count",
+       fill = "Observation class") +
+  theme_minimal()
+
+
+# Bereken gemiddelde aantal per afstandscategorie en observatie
+# Als je counts per transect hebt, zou je dat hier kunnen doen
+mean_data <- fish_data %>%
+  group_by(distance_interval, observation) %>%
+  summarise(mean_count = n()/n_distinct(transect_ID), .groups = "drop")
+
+# Lijnplot: trend per viscategorie over afstand
+ggplot(mean_data, aes(x = distance_interval, y = mean_count, color = observation, group = observation)) +
+  geom_line(size = 1) +
+  geom_point() +
+  labs(title = "Trend van visobservaties per afstandscategorie",
+       x = "Afstandscategorie (m)",
+       y = "Gemiddeld aantal observaties per transect",
+       color = "Viscategorie") +
+  theme_minimal()
+# ziet dus goed dat vooral classe O (onderbroken/onvolledig boogje) toeneemt over het transect
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #### data validation ####
@@ -243,7 +289,7 @@ fish_data <- fish_data %>%
 # Tel het aantal observaties per afstandscategorie en groep
 summary_distance <- fish_data %>%
   filter(!is.na(group)) %>%
-  group_by(distance_interval, group) %>%
+  group_by(distance_interval, observation) %>%
   summarise(total_count = n(), .groups = "drop")
 
 # Maak de stacked barplot
@@ -261,51 +307,103 @@ ggplot(summary_distance, aes(x = distance_interval, y = total_count, fill = grou
 
 
 
-# PCA DISTANCE INTERVAL
+# DCA DISTANCE INTERVAL
+# Laad benodigde package
+library(vegan)
+library(dplyr)
+library(tidyr)
 
-# 1. Tel aantal observaties per afstandscategorie en observatie
-pca_data <- fish_data %>%
+# 1. Maak een matrix: rijen = afstandscategorieën, kolommen = observatiecategorieën
+dca_input <- fish_data %>%
   group_by(distance_interval, observation) %>%
   summarise(count = n(), .groups = "drop") %>%
   pivot_wider(names_from = observation, values_from = count, values_fill = 0)
 
-# 2. Selecteer alleen numerieke kolommen (zonder afstandscategorie)
-pca_input <- pca_data %>% select(-distance_interval)
+# Zet distance_interval als rownames
+dca_matrix <- as.data.frame(dca_input)
+rownames(dca_matrix) <- dca_matrix$distance_interval
+dca_matrix$distance_interval <- NULL  # verwijder duplicaat kolom
 
-# 3. Voer PCA uit (centeren en schalen)
-pca_result <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+# 2. Voer de DCA uit
+dca_result <- decorana(dca_matrix)
 
-# 4. Maak dataframe van PCA scores en voeg afstandscategorie toe
-scores <- as.data.frame(pca_result$x)
-scores$distance_interval <- pca_data$distance_interval
+# 3. Plot de resultaten
+plot(dca_result, type = "t", main = "DCA van visobservaties over afstand")
 
-loadings <- as.data.frame(pca_result$rotation)
-loadings$observation <- rownames(loadings)
+# 3. Pak scores uit: sites (afstandscategorieën) en species (observaties)
+site_scores <- as.data.frame(scores(dca_result, display = "sites"))
+site_scores$distance_interval <- rownames(site_scores)
 
+species_scores <- as.data.frame(scores(dca_result, display = "species"))
+species_scores$observation <- rownames(species_scores)
+
+# 4. Plotten met ggplot2
 ggplot() +
-  geom_point(data = scores, aes(x = PC1, y = PC2, label = distance_interval), color = "black") +
-  geom_text(data = scores, aes(x = PC1, y = PC2, label = distance_interval), nudge_y = 0.1) +
-  geom_segment(data = loadings,
-               aes(x = 0, y = 0, xend = PC1 * 2, yend = PC2 * 2), 
-               arrow = arrow(length = unit(0.2, "cm")), color = "red") +
-  geom_text(data = loadings,
-            aes(x = PC1 * 3.2, y = PC2 * 3.2, label = observation),
-            color = "red") +
+  geom_point(data = site_scores, aes(x = DCA1, y = DCA2), color = "blue", size = 3) +
+  geom_text(data = site_scores, aes(x = DCA1, y = DCA2, label = distance_interval),
+            vjust = -1, color = "blue") +
+  geom_segment(data = species_scores,
+               aes(x = 0, y = 0, xend = DCA1, yend = DCA2),
+               arrow = arrow(length = unit(0.3, "cm")),
+               color = "red") +
+  geom_text(data = species_scores,
+            aes(x = DCA1, y = DCA2, label = observation),
+            color = "red", vjust = 1.5) +
   theme_minimal() +
-  labs(title = "",
-       x = "PC1", y = "PC2")
-
-summary(pca_result)
-# clustering of S2,S1 and O en komt vaker voor verder op het transect
-# S3,V,H geclusterd en komt vaker voor op afstand 200-300m
-# B lijkt wat meer verspreid voor te komen tussen afstand van 100-200 en 200-300
+  labs(title = "DCA biplot: Afstandscategorieën en visobservaties",
+       x = "DCA1",
+       y = "DCA2")
+# 0-100m wijkt af 
+# O en S3 sterk gecoreleerd
 
 
-ggplot(scores, aes(x = PC1, y = PC2, label = distance_interval)) +
-  geom_point() +
-  geom_text(nudge_y = 0.1) +
+#### dca depth class
+library(dplyr)
+library(tidyr)
+library(vegan)
+library(ggplot2)
+
+# 1. Samenvatting maken per depth_class en observation
+summary_data <- fish_data %>%
+  group_by(depth_class, observation) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)
+
+# 2. Alleen de viscategorieën selecteren voor DCA
+dca_input <- summary_data %>% select(-depth_class)
+
+# 3. Detrended Correspondence Analysis uitvoeren
+dca_result <- decorana(dca_input)
+
+# 4. Scores extraheren en combineren met depth_class
+scores <- data.frame(
+  DCA1 = dca_result$sites[,1],
+  DCA2 = dca_result$sites[,2],
+  depth_class = summary_data$depth_class
+)
+
+# 5. Plot maken met ggplot2
+ggplot(scores, aes(x = DCA1, y = DCA2, color = depth_class, label = depth_class)) +
+  geom_point(size = 4) +
+  geom_text(vjust = -1) +
   theme_minimal() +
-  labs(title = "PCA van visobservaties per afstandscategorie")
+  labs(title = "DCA van visobservaties per diepteklasse",
+       x = "DCA-as 1",
+       y = "DCA-as 2",
+       color = "Diepteklasse")
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
