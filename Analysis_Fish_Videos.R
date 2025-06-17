@@ -292,8 +292,21 @@ ggplot() +
             aes(x = PC1 * 3.2, y = PC2 * 3.2, label = observation),
             color = "red") +
   theme_minimal() +
-  labs(title = "PCA met afstandscategorieën (punten) en observatietypen (pijlen)",
+  labs(title = "",
        x = "PC1", y = "PC2")
+
+summary(pca_result)
+# clustering of S2,S1 and O en komt vaker voor verder op het transect
+# S3,V,H geclusterd en komt vaker voor op afstand 200-300m
+# B lijkt wat meer verspreid voor te komen tussen afstand van 100-200 en 200-300
+
+
+ggplot(scores, aes(x = PC1, y = PC2, label = distance_interval)) +
+  geom_point() +
+  geom_text(nudge_y = 0.1) +
+  theme_minimal() +
+  labs(title = "PCA van visobservaties per afstandscategorie")
+
 
 
 
@@ -312,20 +325,7 @@ fviz_pca_biplot(pca_result,
                 legend.title = list(fill = "Variables", color = "Samples"),
                 title = "PCA Biplot")
 
-fviz_pca_biplot(pca_result,
-                geom.ind = "text",
-                repel = TRUE,
-                col.var = "red",
-                col.ind = "blue",
-                label = "all") # label zowel punten als pijlen
 
-
-fviz_pca_biplot(pca_result,
-                geom.ind = "text",
-                repel = TRUE,
-                col.var = "red",
-                col.ind = "blue",
-                label = c("ind", "var"))  # labels voor individuen en variabelen
 
 
 
