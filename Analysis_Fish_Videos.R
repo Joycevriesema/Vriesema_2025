@@ -473,6 +473,142 @@ summary(pca_result)
 biplot(pca_result, scale = 0)
 
 
+##### distance to river mouth ####
+transects_paired2 <- fish_data %>%
+  mutate(transect_pair = case_when(
+    transect_ID %in% c("pap_1", "pap_2") ~ "Papyrus Mbalangeti Mouth",
+    transect_ID %in% c("pap_3", "pap_4") ~ "Papyrus Robana Mouth",
+    transect_ID %in% c("pap_5", "pap_6") ~ "Papyrus Robana Far",
+    transect_ID %in% c("tree_1", "tree_2") ~ "Tree Mbalangeti Mid",
+    transect_ID %in% c("tree_3", "tree_4") ~ "Tree Robana Mid",
+    transect_ID %in% c("tree_5", "tree_6") ~ "Tree Robana Mouth",
+    transect_ID %in% c("tree_7", "tree_8") ~ "Tree Robana Far",
+    TRUE ~ NA_character_
+  )) %>%
+  mutate(
+    dist_river = case_when(
+      grepl("Mouth", transect_pair) ~ "close",
+      grepl("Mid", transect_pair) ~ "mid",
+      grepl("Far", transect_pair) ~ "far",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+%>%
+  group_by(transect_pair, dist_river, observation, depth_class, distance_interval) %>%
+  summarise(count = n(), .groups = "drop")
+
+# df variabelen
+environmental <- transects_paired2 %>%
+  group_by(depth_class, distance_interval, dist_river) %>%
+  summarise(.groups = "drop") %>%
+  mutate(
+    distance_num = case_when(
+      distance_interval == "0-100" ~ 100,
+      distance_interval == "100-200" ~ 200,
+      distance_interval == "200-300" ~ 300,
+      distance_interval == "300-400" ~ 400,
+      distance_interval == "400-500" ~ 500
+    ),
+    depth_num = case_when(
+      depth_class == "1.0-1.5" ~ 1,
+      depth_class == "1.5-2.0" ~ 2,
+      depth_class == "2.0-2.5" ~ 3,
+      depth_class == "2.5-3.0" ~ 4,
+      depth_class == "3.0-3.5" ~ 5,
+      depth_class == "3.5-4.0" ~ 6,
+      depth_class == "4.0-4.5" ~ 7,
+      depth_class == "4.5-5.0" ~ 8,
+    )
+  ) %>%
+  select(distance_num, depth_num, dist_river)
+
+
+# df observaties 
+fish_data_wide3 <- transects_paired2 %>%
+  group_by(depthnumeric, observation, distnumeric, dist_river) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)%>%
+  select(-depthnumeric,-distnumeric, -dist_river)
+
+
+
+combined_df <- cbind(environmental, fish_data_wide3)
+species_matrix <- combined_df %>%
+  select(-distance_num, -depth_num, -dist_river)
+
+
+library(vegan)
+
+# Stap 3: species matrix selecteren (alle visobservaties)
+species_matrix <- combined_df %>%
+  select(-distance_num, -depth_num, -dist_river)
+
+# Stap 4: DCA uitvoeren
+dca_result <- decorana(species_matrix)
+
+# Stap 5: omgevingsvariabelen (environmental fit) toevoegen
+envfit_result <- envfit(dca_result ~ distance_num + depth_num + dist_river, data = combined_df)
+
+# Plotten van DCA resultaat
+plot(dca_result, main = "DCA of Fish Data")
+
+# Omgevingsvariabelen toevoegen aan de plot
+plot(envfit_result, add = TRUE)
+
+
+
+
+
+library(vegan)
+
+# 1. DCA op species matrix (visobservaties)
+species_matrix <- combined_df %>%
+  select(-distance_num, -depth_num, -dist_river)
+
+dca_result <- decorana(species_matrix)
+
+# 2. envfit voor omgevingsvariabelen
+envfit_result <- envfit(dca_result ~ distance_num + depth_num + dist_river, data = combined_df)
+
+# 3. Basis plot van DCA scores (observaties als punten)
+ordiplot(dca_result, type = "n", main = "DCA with environmental vectors")
+
+# 4. Voeg visobservaties toe als letters (punten met labels)
+orditorp(dca_result, display = "sites", labels = colnames(species_matrix), air = 0.01, cex=0.8)
+vegan::ordiplot(dca,display="sites",cex=0.7,type="text",xlim=c(-7,7))
+vegan::orditorp(dca,display = "species", priority=species_matrix,
+                col="red",pcol = "red",pch="+",cex=0.8,xlim=c(-5,5))
+
+# 5. Voeg pijlen toe voor environmental variables
+# Numerieke variabelen als pijlen
+ordiarrows(dca_result, envfit_result$vectors$arrows * sqrt(envfit_result$vectors$r), col = "blue", label = rownames(envfit_result$vectors$arrows))
+
+
+# Categorische variabele (factor) als centroid punten
+plot(envfit_result, p.max=0.05, col="red", add=TRUE)
+
+
+# species_matrix moet een matrix/dataframe met alleen vissoorten zijn
+species_matrix <- combined_df %>%
+  select(-distance_num, -depth_num, -dist_river)
+
+# Maak DCA
+dca <- vegan::decorana(species_matrix)
+
+# Plot DCA zonder punten
+vegan::ordiplot(dca, type = "n")
+
+# Voeg species labels toe met orditorp
+vegan::orditorp(dca, display = "species", labels = colnames(species_matrix),
+                col = "red", pch = "+", cex = 0.8)
+
+
+
+
+
+
 
 
 
