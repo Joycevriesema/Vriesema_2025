@@ -245,23 +245,29 @@ biplot(pca_noS3, cex = 0.6, xlabs = rep("", nrow(pca_input_noS3)))
 #### PCA en DCA trials ####
 # verschillen tussen afstand en diepte voor de verschillende vis categorieën
 # PCA for factors depth and distance
-
 depth_distance <- fish_data %>%
-  select(distance_interval, depth_class)%>%
+  group_by(depth_class, distance_interval) %>%
+  summarise(.groups = "drop") %>%
   mutate(
     distance_num = case_when(
       distance_interval == "0-100" ~ 100,
       distance_interval == "100-200" ~ 200,
       distance_interval == "200-300" ~ 300,
       distance_interval == "300-400" ~ 400,
-      distance_interval == "400-500" ~ 500,
-      TRUE ~ NA_real_
+      distance_interval == "400-500" ~ 500
     ),
-    depth_num = as.numeric(sub("(\\d+\\.\\d+)-.*", "\\1", depth_class))
+    depth_num = case_when(
+      depth_class == "1.0-1.5" ~ 1,
+      depth_class == "1.5-2.0" ~ 2,
+      depth_class == "2.0-2.5" ~ 3,
+      depth_class == "2.5-3.0" ~ 4,
+      depth_class == "3.0-3.5" ~ 5,
+      depth_class == "3.5-4.0" ~ 6,
+      depth_class == "4.0-4.5" ~ 7,
+      depth_class == "4.5-5.0" ~ 8,
+    )
   ) %>%
   select(distance_num, depth_num)
-
-
 
 ##### explore the correlations among the environmental factors in a panel pairs plot
 psych::pairs.panels(depth_distance,smooth=F,ci=T,ellipses=F,stars=T,method="pearson")
@@ -279,14 +285,197 @@ summary(pca_env)
 
 # nu filteren voor de observatie en die in wide format zetten
 fish_data_wide <- fish_data %>%
-  group_by(date, transect_ID, observation, distance_interval) %>%
+  group_by(depth_class, observation, distance_interval) %>%
   summarise(count = n(), .groups = "drop") %>%
   pivot_wider(names_from = observation, values_from = count, values_fill = 0)%>%
-  select(-date,-transect_ID,-distance_interval)
+  select(-depth_class,-distance_interval)
 
 
 dca<-vegan::decorana(fish_data_wide)
 dca
+# since the DCA1 axis length is less than 1.5, it suggests the variation in fish communities along that gradient (depth or distance) is relatively small and there isn’t a strong spatial separation of the different fish classes by those environmental variables.
+# so PCA is more appropriate
+# merging depth_distance en fish_data wide
+
+fish_data <- fish_data %>%
+  mutate(
+    distnumeric = case_when(
+      distance_interval == "0-100" ~ 1,
+      distance_interval == "100-200" ~ 2,
+      distance_interval == "200-300" ~ 3,
+      distance_interval == "300-400" ~ 4,
+      distance_interval == "400-500" ~ 5,
+      TRUE ~ NA_real_
+    ),
+    depthnumeric = case_when(
+      depth_class == "1.0-1.5" ~ 1,
+      depth_class == "1.5-2.0" ~ 2,
+      depth_class == "2.0-2.5" ~ 3,
+      depth_class == "2.5-3.0" ~ 4,
+      depth_class == "3.0-3.5" ~ 5,
+      depth_class == "3.5-4.0" ~ 6,
+      depth_class == "4.0-4.5" ~ 7,
+      depth_class == "4.5-5.0" ~ 8,
+      TRUE ~ NA_real_
+    )
+  )
+
+# hier begint het
+depth_distance2 <- fish_data %>%
+  group_by(depthnumeric, distnumeric) %>%
+  summarise(.groups = "drop")
+
+fish_data_wide2 <- fish_data %>%
+  group_by(depthnumeric, observation, distnumeric) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)%>%
+  select(-depthnumeric,-distnumeric)
+
+# samenvoegen met fish_data_wide
+# Zorg dat er geen dubbele kolomnamen zijn
+depth_distance1 <- depth_distance2 %>% select(distnumeric, depthnumeric)
+
+# Combineer de datasets
+combined_data <- cbind(fish_data_wide, depth_distance1)
+
+# Nu PCA uitvoeren op alle variabelen samen
+pca_combined <- prcomp(combined_data, center = TRUE, scale. = TRUE)
+
+# Resultaat samenvatten
+summary(pca_combined)
+
+# Biplot tekenen
+biplot(pca_combined, scale = 0)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pca_result <- prcomp(depth_distance, center = TRUE, scale. = TRUE)
+summary(pca_result)
+
+biplot(pca_result, scale = 0)
+
+
+pca_fish <- prcomp(fish_data_wide, center = TRUE, scale. = TRUE)
+summary(pca_fish)
+biplot(pca_fish, scale = 0)
+
+# so depth and distance are partially related but influence each other opposite
+# i think we can conclude to group al B,V,O,H together and also the S-groups?
+
+
+
+#### difference in depth and distance when individuals are grouped en schools
+fish_data_grouped2 <- fish_data %>%
+  mutate(observation_grouped = case_when(
+    observation %in% c("S1", "S2", "S3") ~ "School",
+    observation %in% c("V", "B", "O", "H") ~ "Individual",
+    TRUE ~ NA_character_
+  )) %>%
+  group_by(distnumeric, observation_grouped, depthnumeric) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Zet data om naar breed formaat voor PCA
+fish_pca_input <- fish_data_grouped2 %>%
+  pivot_wider(
+    names_from = observation_grouped,
+    values_from = count,
+    values_fill = 0
+  )
+
+# Selecteer numerieke variabelen
+pca_input <- fish_pca_input %>%
+  select(School, Individual)
+
+# Voer PCA uit
+pca_result <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+
+# Maak een biplot
+biplot(pca_result, scale = 0)
+
+# Samenvatting met standaarddeviaties en proportie verklaarde variantie
+summary(pca_result)
+
+# PCA rotatie (belangrijk voor interpretatie van de richting van de pijlen)
+pca_result$rotation
+
+# PCA scores (locatie van de punten in de nieuwe ruimte)
+pca_result$x
+
+
+
+
+library(dplyr)
+library(tidyr)
+
+# Stap 1: Voeg numeric kolommen toe aan fish_data
+fish_data <- fish_data %>%
+  mutate(
+    distnumeric = case_when(
+      distance_interval == "0-100" ~ 100,
+      distance_interval == "100-200" ~ 200,
+      distance_interval == "200-300" ~ 300,
+      distance_interval == "300-400" ~ 400,
+      distance_interval == "400-500" ~ 500,
+      TRUE ~ NA_real_
+    ),
+    depthnumeric = case_when(
+      depth_class == "1.0-1.5" ~ 1,
+      depth_class == "1.5-2.0" ~ 2,
+      depth_class == "2.0-2.5" ~ 3,
+      depth_class == "2.5-3.0" ~ 4,
+      depth_class == "3.0-3.5" ~ 5,
+      depth_class == "3.5-4.0" ~ 6,
+      depth_class == "4.0-4.5" ~ 7,
+      depth_class == "4.5-5.0" ~ 8,
+      TRUE ~ NA_real_
+    )
+  )
+
+# Stap 2: Groepeer naar School en Individual
+fish_data_grouped <- fish_data %>%
+  mutate(observation_grouped = case_when(
+    observation %in% c("S1", "S2", "S3") ~ "School",
+    observation %in% c("V", "B", "O", "H") ~ "Individual",
+    TRUE ~ NA_character_
+  )) %>%
+  group_by(distnumeric, depthnumeric, observation_grouped) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Stap 3: Breed maken per groep
+fish_data_wide <- fish_data_grouped %>%
+  pivot_wider(names_from = observation_grouped, values_from = count, values_fill = 0)
+
+# Stap 4: PCA-ready dataset maken
+pca_data <- fish_data_wide %>%
+  select(School, Individual, distnumeric, depthnumeric)
+
+# Stap 5: PCA uitvoeren
+pca_result <- prcomp(pca_data, center = TRUE, scale. = TRUE)
+
+# Stap 6: Samenvatting + biplot
+summary(pca_result)
+biplot(pca_result, scale = 0)
+
+
+
+
+
 
 
 
