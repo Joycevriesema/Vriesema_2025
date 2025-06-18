@@ -163,7 +163,7 @@ library(FactoMineR)
 library(factoextra)
 
 fish_data_wide <- fish_data %>%
-  group_by(date, transect_ID, observation) %>%
+  group_by(date, transect_ID, observation, distance_interval) %>%
   summarise(count = n(), .groups = "drop") %>%
   pivot_wider(names_from = observation, values_from = count, values_fill = 0)
 
@@ -242,13 +242,177 @@ biplot(pca_noS3, cex = 0.6, xlabs = rep("", nrow(pca_input_noS3)))
 # lijkt erop dat het niet veel uitmaakt of je een B,V,H of O noteert voor de observatie van een individuele vis
 
 
-
+#### PCA en DCA trials ####
 # verschillen tussen afstand en diepte voor de verschillende vis categorieën
-# DCA
-# explore the correlations among the environmental factors in a panel pairs plot
-psych::pairs.panels(fish_data,smooth=F,ci=T,ellipses=F,stars=T,method="pearson")
-psych::pairs.panels(envdat,smooth=F,ci=T,ellipses=F,stars=T,method="spearman")
-# note that the units are very different! 
+# PCA for factors depth and distance
+
+depth_distance <- fish_data %>%
+  select(distance_interval, depth_class)%>%
+  mutate(
+    distance_num = case_when(
+      distance_interval == "0-100" ~ 100,
+      distance_interval == "100-200" ~ 200,
+      distance_interval == "200-300" ~ 300,
+      distance_interval == "300-400" ~ 400,
+      distance_interval == "400-500" ~ 500,
+      TRUE ~ NA_real_
+    ),
+    depth_num = as.numeric(sub("(\\d+\\.\\d+)-.*", "\\1", depth_class))
+  ) %>%
+  select(distance_num, depth_num)
+
+
+
+##### explore the correlations among the environmental factors in a panel pairs plot
+psych::pairs.panels(depth_distance,smooth=F,ci=T,ellipses=F,stars=T,method="pearson")
+psych::pairs.panels(depth_distance,smooth=F,ci=T,ellipses=F,stars=T,method="spearman")
+# distance and depth are correlated, seems logical but not very strong
+
+##### Ordination: run a Principal Component Analysis (PCA) on the environmental data
+# .scale=T means: use correlations instead of covariances
+# use .scale=T for datasets where the variables are measured in different use
+
+# do a principal component analysis (pca) 
+pca_env<-prcomp(depth_distance,center=T,scale=T)
+pca_env
+summary(pca_env)
+
+# nu filteren voor de observatie en die in wide format zetten
+fish_data_wide <- fish_data %>%
+  group_by(date, transect_ID, observation, distance_interval) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)%>%
+  select(-date,-transect_ID,-distance_interval)
+
+
+dca<-vegan::decorana(fish_data_wide)
+dca
+
+
+
+
+
+library(tidyverse)
+library(FactoMineR)
+library(factoextra)
+
+# 1. Aggregeer per observatie (hier uniek per date/transect_ID/video_id/distance_interval/depth_class)
+fish_wide <- fish_data %>%
+  group_by(date, transect_ID, video_id, distance_interval, depth_class, observation) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  # Maak wide: kolommen = vissoorten, rijen = unieke observaties (combi van de andere factoren)
+  pivot_wider(names_from = observation, values_from = count, values_fill = 0)
+
+# 2. Maak een unieke rij-ID (bijv combinatie van distance en depth) om als rijnaam te gebruiken
+fish_wide <- fish_wide %>%
+  unite("sample_id", date, transect_ID, video_id, distance_interval, depth_class, remove = FALSE)
+
+# 3. Maak matrix van alleen vissoorten (kolommen)
+fish_matrix <- fish_wide %>%
+  select(B, H, O, S1, S2, S3, V)
+
+# 4. PCA op vissoorten matrix
+res.pca <- PCA(fish_matrix, graph = FALSE)
+
+# 5. Visualiseer PCA, kleur de punten op basis van distance_interval of depth_class
+fviz_pca_ind(res.pca,
+             geom = "point",
+             habillage = fish_wide$distance_interval,  # of $depth_class
+             addEllipses = TRUE,
+             palette = "jco",
+             legend.title = "Distance Interval"
+)
+
+# 6. Optioneel: voeg pijlen toe voor afstand en diepte (als aanvullende variabelen)
+# Zet distance_interval en depth_class om naar numeriek voor gebruik als suppl. variabelen
+# Dit kan wat maatwerk zijn afhankelijk van je data en interpretatie.
+
+
+
+
+
+
+
+
+
+# the PCs are reduced dimensions of the dataset
+# you reduce 6 variables to 2 dimensions
+# make a biplot (variable scores plus sample score) the pca ordination
+# and label the axis with the explained variation
+biplot(pca_env,xlab="PC1 49%",ylab="PC2 21%")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Zorg dat depth_distance geen rownames heeft (model.matrix werkt met data.frames)
+depth_distance <- depth_distance %>% tibble::rownames_to_column(var = "row_id")
+
+# Maak dummy-variabelen voor depth_class en distance_interval tegelijk
+dummy_vars <- model.matrix(~ depth_class + distance_interval - 1, data = depth_distance)
+
+# Combineer de dummy variabelen met je observatie-tellingen (B, H, O, S1, S2, S3, V)
+pca_input <- cbind(dummy_vars, depth_distance %>% select(B:S2))
+
+# Voer PCA uit
+pca <- prcomp(pca_input, center = TRUE, scale. = TRUE)
+
+
+library(ggplot2)
+
+# Maak een dataframe van PCA scores
+pca_scores <- as.data.frame(pca$x)
+
+# Voeg metadata toe voor kleur
+pca_scores$depth_class <- depth_distance$depth_class
+pca_scores$distance_interval <- depth_distance$distance_interval
+
+# Plot met kleur per depth_class
+ggplot(pca_scores, aes(x = PC1, y = PC2, color = depth_class)) +
+  geom_point(size = 3, alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "PCA plot van observaties gekleurd op Depth Class",
+       x = "PC1", y = "PC2", color = "Depth Class")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# do a principal component analysis (pca) 
+pca<-prcomp(fish_data_wide,center=T,scale=T)
+pca_env
+summary(pca_env)
+# show the site scores for axis 1
+pca_env$x
+
+# the PCs are reduced dimensions of the dataset
+# you reduce 6 variables to 2 dimensions
+# make a biplot (variable scores plus sample score) the pca ordination
+# and label the axis with the explained variation
+biplot(pca_env,xlab="PC1 49%",ylab="PC2 21%")
 
 
 
