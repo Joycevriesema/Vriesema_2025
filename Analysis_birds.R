@@ -8,7 +8,147 @@ library(tidyr)
 
 # load bird data and filter out old data (5-Feb-2025 & 8-Feb-2025)
 data_bird <- read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRCwiQGeumB9AuvRjnobaDJLq76NWyPQrvnPdvP58Qxv5SGMt4LMKjxMQMREGnYdoIkO1oCfTOcqp1Z/pub?gid=0&single=true&output=csv") %>%
-  dplyr::filter (!date %in% c("5-Feb-2025", "8-Feb-2025"))
+  dplyr::filter (!date %in% c("5-Feb-2025", "8-Feb-2025")) # old data
+
+# assign each bird species a unique color
+species_colors <- c(
+  "African fish eagle" = "#7b4173",
+  "African grey flycatcher" = "#1b9e77",
+  "African harrier hawk" = "#ad494a",
+  "African jacana" = "#6b6ecf",
+  "African mourning dove" = "#bcbd22",
+  "African openbill" = "#ffed6f",
+  "African palm swift" = "#a55194",
+  "African spoonbill" = "#bc80bd",
+  "Barn swallow" = "#d6616b",
+  "Beautiful sunbird" = "#e7298a",
+  "Black chested snake eagle" = "#bc6b65",
+  "Black crake" = "#c5b0d5",
+  "Black kite" = "#e7ba52",
+  "Black-headed gonolek" = "#e377c2",
+  "Black-headed weaver" = "#843c39",
+  "Black-shouldered kite" = "#8c6d31",
+  "Blue capped cordon blue" = "#f781bf",
+  "Bronze mannikin" = "#f7b6d2",
+  "Cardinal woodpecker" = "#393b79",
+  "Common bullbul" = "#de9ed6",
+  "Common cuckoo" = "#fb8072",
+  "Common sandpiper" = "#d6616b",
+  "Diederik cuckoo" = "#8dd3c7",
+  "Dusky turtle dove" = "#bd9e39",
+  "Golden-backed weaver" = "#b5cf6b",
+  "Gray-headed kingfisher" = "#fccde5",
+  "Grey heron" = "#ce6dbd",
+  "Grey-capped warbler" = "#b3de69",
+  "Hadada ibis" = "#8c6d31",
+  "Little egret" = "#9467bd",
+  "Little stint" = "#d95f02",
+  "Long-tailed cormorant" = "#ff7f0e",
+  "Malachite kingfisher" = "#17becf",
+  "Marabou stork" = "#66a61e",
+  "Namaqua dove" = "#fdb462",
+  "Northern brown-throated weaver" = "#aec7e8",
+  "Olive bee-eater" = "#d62728",
+  "Pied kingfisher" = "#1f77b4",
+  "Red-chested sunbird" = "#ffbb78",
+  "Red-eyed dove" = "#80b1d3",
+  "Ring-necked dove" = "#17a768",
+  "Sand martin" = "#ff9896",
+  "Slender-billed weaver" = "#2ca02c",
+  "Speckled mouse bird" = "#bebada",
+  "Spur-winged goose" = "#7570b3",
+  "Squacco heron" = "#ccebc5",
+  "Striated heron" = "#dbdb8d",
+  "Swamp flycatcher" = "#8c564b",
+  "Tawny-flanked prinia" = "#cedb9c",
+  "Village weaver" = "#7f7f7f",
+  "White-faced whistling-duck" = "#7b4173",
+  "White-throated bee-eater" = "#98df8a",
+  "White-winged tern" = "#9edae5",
+  "Willow warbler" = "#c49c94",
+  "Woodland kingfisher" = "#637939",
+  "Yellow fronted canary" = "#999999",
+  "Yellow-billed stork" = "#e6ab02",
+  "Zitting cisticola" = "#e7cb94"
+)
+
+
+# divide birds into groups according to their primary diet preferences: fish-eating birds and seed/plant/insect feeders
+
+fish_eating_birds <- c(
+  "Pied kingfisher",
+  "Long-tailed cormorant",
+  "Malachite kingfisher",
+  "Striated heron",
+  "Grey heron",
+  "Squacco heron",
+  "African fish eagle",
+  "African openbill",        # feeds on aquatic snails and small fish
+  "White-winged tern",       # small fish and insects
+  "Little egret",
+  "Yellow-billed stork",
+  "Marabou stork",           # opportunist, includes fish and carrion
+  "Spur-winged goose",       # omnivore, eats aquatic plants and small animals incl. fish
+  "African spoonbill",       # mostly fish and aquatic invertebrates
+  "Hadada ibis"              # invertebrates, but sometimes fish and frogs
+)
+# fish-eating birds either dive, wade, or skim aquatic habitats and are well-documented feeding on fish or aquatic prey.
+
+insect_seed_plant_birds <- c(
+  "Slender-billed weaver",
+  "Olive bee-eater",
+  "Swamp flycatcher",
+  "Black-headed gonolek",
+  "Village weaver",
+  "African mourning dove",
+  "Northern brown-throated weaver",
+  "Red-chested sunbird",
+  "White-throated bee-eater",
+  "Sand martin",
+  "Black crake",              # omnivore, more insect/worm than fish
+  "Willow warbler",
+  "Bronze mannikin",
+  "Lesser-striped swallow",
+  "Cardinal woodpecker",
+  "Woodland kingfisher",      # mostly insects, occasional fish
+  "Black-headed weaver",
+  "Common sandpiper",         # insects/small inverts on shorelines
+  "African palm swift",
+  "Common bullbul",
+  "Golden-backed weaver",
+  "Tawny-flanked prinia",
+  "Black-shouldered kite",
+  "Dusky turtle dove",
+  "Zitting cisticola",
+  "African harrier hawk",     # bird eggs, nestlings, small animals (not fish)
+  "Barn swallow",
+  "White-faced whistling-duck", # omnivorous, mostly plant material
+  "Ring-necked dove",
+  "Namaqua dove",
+  "Grey-capped warbler",
+  "Common cuckoo",
+  "Red-eyed dove",
+  "Gray-headed kingfisher",    # mostly insects, occasionally fish
+  "Speckled mouse bird",
+  "Black chested snake eagle", # reptiles and snakes, not fish
+  "Diederik cuckoo",
+  "Blue capped cordon blue",
+  "Yellow fronted canary",
+  "African grey flycatcher",
+  "Little stint",              # invertebrates in mud
+  "Beautiful sunbird"
+)
+# swallows, warblers, and kingfishers are mainly insectivorous. Weavers, doves and canaries are seed feeders and sunbirds are nectarivores. Some species occaionlaay eat fish but don't rely on this as primary food source.
+
+
+
+
+
+
+
+
+
+
 
 
 bird_data_wide<- data_bird %>%
@@ -110,48 +250,7 @@ ggplot(transects_paired, aes(x = transect_pair, y = count, fill = observation)) 
 
 
 
-# assign each bird species a unique color
-species_colors <- c(
-  "Pied kingfisher" = "#1f77b4",
-  "Long-tailed cormorant" = "#ff7f0e",
-  "Slender-billed weaver" = "#2ca02c",
-  "Olive bee-eater" = "#d62728",
-  "Little egret" = "#9467bd",
-  "Swamp flycatcher" = "#8c564b",
-  "Black-headed gonolek" = "#e377c2",
-  "Village weaver" = "#7f7f7f",
-  "African mourning dove" = "#bcbd22",
-  "Malachite kingfisher" = "#17becf",
-  "Northern brown-throated weaver" = "#aec7e8",
-  "Red-chested sunbird" = "#ffbb78",
-  "White-throated bee-eater" = "#98df8a",
-  "Sand martin" = "#ff9896",
-  "Black crake" = "#c5b0d5",
-  "Willow warbler" = "#c49c94",
-  "Bronze mannikin" = "#f7b6d2",
-  "Lesser-striped swallow" = "#c7c7c7",
-  "Striated heron" = "#dbdb8d",
-  "White-winged tern" = "#9edae5",
-  "Cardinal woodpecker" = "#393b79",
-  "Woodland kingfisher" = "#637939",
-  "Hadada ibis" = "#8c6d31",
-  "Black-headed weaver" = "#843c39",
-  "Black kite" = "#e7ba52",
-  "Common sandpiper" = "#d6616b",
-  "African fish eagle" = "#7b4173",
-  "African palm swift" = "#a55194",
-  "Grey heron" = "#ce6dbd",
-  "Common bullbul" = "#de9ed6",
-  "African jacana" = "#6b6ecf",
-  "Golden-backed weaver" = "#b5cf6b",
-  "Tawny-flanked prinia" = "#cedb9c",
-  "Black-shouldered kite" = "#8c6d31",
-  "Dusky turtle dove" = "#bd9e39",
-  "Zitting cisticola" = "#e7cb94",
-  "African harrier hawk" = "#ad494a",
-  "Barn swallow" = "#d6616b",
-  "White-faced whistling-duck" = "#7b4173"
-)
+
 
 #### all birds ####
 
